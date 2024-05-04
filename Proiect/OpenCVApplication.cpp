@@ -7,7 +7,6 @@
 #include <tesseract/baseapi.h>
 #include <cmath>
 #include <leptonica/allheaders.h>
-#include <regex>
 
 using namespace cv;
 using namespace std;
@@ -135,7 +134,7 @@ cv::Mat canny(cv::Mat src, double weak_th = -1, double strong_th = -1) {
             double grad_ang = ang.at<double>(i_y, i_x);
             if (abs(grad_ang) > 180)
                 grad_ang = abs(grad_ang - 180);
-            else 
+            else
                 grad_ang = abs(grad_ang);
 
             // selecting the neighbours of the target pixel
@@ -214,81 +213,59 @@ bool compareContourAreas(const std::vector<cv::Point>& c1, const std::vector<cv:
 }
 
 int main() {
-    Mat img = imread("./images/qashqai.jpg");
-    if (img.empty()) {
-        std::cerr << "Error opening image file\n";
-        return -1;
-    }
 
-    Mat thresh;
-    if (img.channels() == 3) {
-        cvtColor(img, thresh, COLOR_BGR2GRAY);
-    }
-    else {
-        thresh = img.clone();
-    }
+    cv::Mat img = cv::imread("E:/Facultate/PI/Proiect/Images/bemve.jpg");
 
-    adaptiveThreshold(thresh, thresh, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY, 11, 2);
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
-    morphologyEx(thresh, thresh, MORPH_CLOSE, kernel);
+    cv::Mat gray;
+    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    std::cout << "Grayscale - finished" << std::endl;
 
-    Mat edged;
-    Canny(thresh, edged, 30, 200);
-    std::cout << "Edge detection - finished\n";
+    cv::Mat edged = canny(gray, 30, 200); // Folosirea funcției dvs. personalizate 'canny'
+    std::cout << "Canny_detector - finished" << std::endl;
 
-    vector<vector<Point>> contours;
-    findContours(edged, contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    cv::imshow("edged", edged);
 
-    Rect license_plate_rect;
-    for (const vector<Point>& contour : contours) {
-        double area = contourArea(contour);
-        double aspect_ratio = float(boundingRect(contour).width) / boundingRect(contour).height;
-        vector<Point> hull;
-        convexHull(contour, hull);
-        double hull_area = contourArea(hull);
-        double solidity = area / hull_area;
+    edged.convertTo(edged, CV_8U);
 
-        if (area > 100 && aspect_ratio > 2 && aspect_ratio < 6 && solidity > 0.7) {
-            license_plate_rect = boundingRect(contour);
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(edged.clone(), contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+
+    // Utilizarea funcției de comparare
+    std::sort(contours.begin(), contours.end(), compareContourAreas);
+
+    std::vector<cv::Point> screenCnt;
+    for (auto& c : contours) {
+        double peri = cv::arcLength(c, true);
+        std::vector<cv::Point> approx;
+        cv::approxPolyDP(c, approx, 0.018 * peri, true);
+
+        cv::Rect rect = cv::boundingRect(approx);
+        double aspect_ratio = static_cast<double>(rect.width) / rect.height;
+        if (approx.size() == 4) {
+            std::cout << aspect_ratio << std::endl;
+            screenCnt = approx;
             break;
         }
     }
 
-    Mat license_plate_image;
-    if (!license_plate_rect.empty()) {
-        license_plate_image = img(license_plate_rect);
-    }
+    // Extract license plate region
+    Rect roi = boundingRect(screenCnt);
+    Mat Cropped = gray(roi);
 
-    if (!license_plate_image.empty()) {
-        tesseract::TessBaseAPI* tess = new tesseract::TessBaseAPI();
-        tess->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
-        tess->SetPageSegMode(tesseract::PSM_SINGLE_BLOCK);
+    tesseract::TessBaseAPI* tess = new tesseract::TessBaseAPI();
+    tess->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
+    tess->SetPageSegMode(tesseract::PSM_AUTO);
+    tess->SetImage((uchar*)Cropped.data, Cropped.cols, Cropped.rows, 1, Cropped.cols);
 
-        int width = license_plate_image.cols;
-        int height = license_plate_image.rows;
-        uchar* license_plate_data = license_plate_image.data;
+    char* text = tess->GetUTF8Text();
+    std::cout << "Detected license plate number is: " << text << std::endl;
 
-        tess->SetImage(license_plate_data, width, height, license_plate_image.channels(), width);
-        char* ocr_result = tess->GetUTF8Text();
+    cv::resize(img, img, cv::Size(500, 300));
+    cv::resize(Cropped, Cropped, cv::Size(400, 200));
+    cv::imshow("car", img);
+    cv::imshow("Cropped", Cropped);
 
-        std::cout << "License plate number: " << ocr_result << std::endl;
+    cv::waitKey(0);
 
-        tess->End();
-        delete tess;
-        free(ocr_result);
-    }
-    else {
-        std::cout << "License plate not found in the image.\n";
-    }
-
-    // Display the original image, edged image, and cropped license plate (if found)
-    imshow("Original Image", img);
-    if (!edged.empty()) {
-        imshow("Edged Image", edged);
-    }
-    if (!license_plate_image.empty()) {
-        imshow("License Plate", license_plate_image);
-    }
-    waitKey(0);
     return 0;
 }
