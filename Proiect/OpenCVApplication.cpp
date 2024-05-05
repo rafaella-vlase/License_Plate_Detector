@@ -8,6 +8,7 @@
 #include <cmath>
 #include <leptonica/allheaders.h>
 
+
 using namespace cv;
 using namespace std;
 
@@ -213,36 +214,42 @@ bool compareContourAreas(const std::vector<cv::Point>& c1, const std::vector<cv:
 }
 
 int main() {
+    // Read the input image
+    Mat img = imread("E:/Facultate/PI/Proiect/Images/golf2.jpg");
 
-    cv::Mat img = cv::imread("E:/Facultate/PI/Proiect/Images/bemve.jpg");
+    if (img.empty()) {
+        cerr << "Error: Could not open or find the image." << endl;
+        return -1;
+    }
 
-    cv::Mat gray;
-    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
-    std::cout << "Grayscale - finished" << std::endl;
+    Mat gray;
+    cvtColor(img, gray, COLOR_BGR2GRAY);
+    cout << "Grayscale - finished" << endl;
 
-    cv::Mat edged = canny(gray, 30, 200); // Folosirea funcției dvs. personalizate 'canny'
-    std::cout << "Canny_detector - finished" << std::endl;
+    Mat edged = canny(gray); // Use the custom Canny edge detector function
+    cout << "Canny_detector - finished" << endl;
 
-    cv::imshow("edged", edged);
+    imshow("edged", edged);
 
+    // Convert the matrix data type to avoid errors
     edged.convertTo(edged, CV_8U);
 
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(edged.clone(), contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+    vector<vector<Point>> contours;
+    findContours(edged.clone(), contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
 
-    // Utilizarea funcției de comparare
-    std::sort(contours.begin(), contours.end(), compareContourAreas);
+    // Utilize the comparator function for sorting contours
+    sort(contours.begin(), contours.end(), compareContourAreas);
 
-    std::vector<cv::Point> screenCnt;
+    vector<Point> screenCnt;
     for (auto& c : contours) {
-        double peri = cv::arcLength(c, true);
-        std::vector<cv::Point> approx;
-        cv::approxPolyDP(c, approx, 0.018 * peri, true);
+        double peri = arcLength(c, true);
+        vector<Point> approx;
+        approxPolyDP(c, approx, 0.018 * peri, true);
 
-        cv::Rect rect = cv::boundingRect(approx);
+        Rect rect = boundingRect(approx);
         double aspect_ratio = static_cast<double>(rect.width) / rect.height;
         if (approx.size() == 4) {
-            std::cout << aspect_ratio << std::endl;
+            cout << aspect_ratio << endl;
             screenCnt = approx;
             break;
         }
@@ -252,20 +259,29 @@ int main() {
     Rect roi = boundingRect(screenCnt);
     Mat Cropped = gray(roi);
 
-    tesseract::TessBaseAPI* tess = new tesseract::TessBaseAPI();
-    tess->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
-    tess->SetPageSegMode(tesseract::PSM_AUTO);
-    tess->SetImage((uchar*)Cropped.data, Cropped.cols, Cropped.rows, 1, Cropped.cols);
+    Mat binarized;
+    threshold(Cropped, binarized, 0, 255, THRESH_BINARY_INV + THRESH_OTSU);
 
-    char* text = tess->GetUTF8Text();
-    std::cout << "Detected license plate number is: " << text << std::endl;
+    // Initialize Tesseract OCR
+    tesseract::TessBaseAPI* api = new tesseract::TessBaseAPI();
+    api->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
+    api->SetImage((uchar*)binarized.data, binarized.cols, binarized.rows, 1, binarized.step);
 
-    cv::resize(img, img, cv::Size(500, 300));
-    cv::resize(Cropped, Cropped, cv::Size(400, 200));
-    cv::imshow("car", img);
-    cv::imshow("Cropped", Cropped);
+    // Get the text from the license plate
+    char* outText = api->GetUTF8Text();
+    cout << "License plate text: " << outText << endl;
 
-    cv::waitKey(0);
+    // Clean up
+    delete[] outText;
+    api->End();
+
+    resize(img, img, Size(500, 300));
+    resize(Cropped, Cropped, Size(400, 200));
+    imshow("car", img);
+    imshow("Cropped", Cropped);
+
+    waitKey(0);
 
     return 0;
+
 }
