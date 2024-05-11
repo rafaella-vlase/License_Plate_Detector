@@ -8,7 +8,6 @@
 #include <cmath>
 #include <leptonica/allheaders.h>
 
-
 using namespace cv;
 using namespace std;
 
@@ -215,7 +214,7 @@ bool compareContourAreas(const std::vector<cv::Point>& c1, const std::vector<cv:
 
 int main() {
     // Read the input image
-    Mat img = imread("E:/Facultate/PI/Proiect/Images/golf2.jpg");
+    Mat img = imread("E:/Facultate/PI_Proiect/Proiect/Images/golf2.jpg");
 
     if (img.empty()) {
         cerr << "Error: Could not open or find the image." << endl;
