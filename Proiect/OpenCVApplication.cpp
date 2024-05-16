@@ -213,74 +213,78 @@ bool compareContourAreas(const std::vector<cv::Point>& c1, const std::vector<cv:
 }
 
 int main() {
-    // Read the input image
-    Mat img = imread("E:/Facultate/PI_Proiect/Proiect/Images/golf2.jpg");
 
-    if (img.empty()) {
-        cerr << "Error: Could not open or find the image." << endl;
-        return -1;
-    }
+    char fname[MAX_PATH];
+    while (openFileDlg(fname))
+    {
+        // Read the input image
+        Mat img = imread(fname, IMREAD_COLOR);
 
-    Mat gray;
-    cvtColor(img, gray, COLOR_BGR2GRAY);
-    cout << "Grayscale - finished" << endl;
-
-    Mat edged = canny(gray); // Use the custom Canny edge detector function
-    cout << "Canny_detector - finished" << endl;
-
-    imshow("edged", edged);
-
-    // Convert the matrix data type to avoid errors
-    edged.convertTo(edged, CV_8U);
-
-    vector<vector<Point>> contours;
-    findContours(edged.clone(), contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
-
-    // Utilize the comparator function for sorting contours
-    sort(contours.begin(), contours.end(), compareContourAreas);
-
-    vector<Point> screenCnt;
-    for (auto& c : contours) {
-        double peri = arcLength(c, true);
-        vector<Point> approx;
-        approxPolyDP(c, approx, 0.018 * peri, true);
-
-        Rect rect = boundingRect(approx);
-        double aspect_ratio = static_cast<double>(rect.width) / rect.height;
-        if (approx.size() == 4) {
-            cout << aspect_ratio << endl;
-            screenCnt = approx;
-            break;
+        if (img.empty()) {
+            cerr << "Error: Could not open or find the image." << endl;
+            return -1;
         }
+
+        Mat gray;
+        cvtColor(img, gray, COLOR_BGR2GRAY);
+        cout << "Grayscale - finished" << endl;
+
+        Mat edged = canny(gray); // Use the custom Canny edge detector function
+        cout << "Canny_detector - finished" << endl;
+
+        imshow("edged", edged);
+
+        // Convert the matrix data type to avoid errors
+        edged.convertTo(edged, CV_8U);
+
+        vector<vector<Point>> contours;
+        findContours(edged.clone(), contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
+
+        // Utilize the comparator function for sorting contours
+        sort(contours.begin(), contours.end(), compareContourAreas);
+
+        vector<Point> screenCnt;
+        for (auto& c : contours) {
+            double peri = arcLength(c, true);
+            vector<Point> approx;
+            approxPolyDP(c, approx, 0.018 * peri, true);
+
+            Rect rect = boundingRect(approx);
+            double aspect_ratio = static_cast<double>(rect.width) / rect.height;
+            if (approx.size() == 4) {
+                cout << aspect_ratio << endl;
+                screenCnt = approx;
+                break;
+            }
+        }
+
+        // Extract license plate region
+        Rect roi = boundingRect(screenCnt);
+        Mat Cropped = gray(roi);
+
+        Mat binarized;
+        threshold(Cropped, binarized, 0, 255, THRESH_BINARY_INV + THRESH_OTSU);
+
+        // Initialize Tesseract OCR
+        tesseract::TessBaseAPI* api = new tesseract::TessBaseAPI();
+        api->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
+        api->SetImage((uchar*)binarized.data, binarized.cols, binarized.rows, 1, binarized.step);
+
+        // Get the text from the license plate
+        char* outText = api->GetUTF8Text();
+        cout << "License plate text: " << outText << endl;
+
+        // Clean up
+        delete[] outText;
+        api->End();
+
+        resize(img, img, Size(500, 300));
+        resize(Cropped, Cropped, Size(400, 200));
+        imshow("car", img);
+        imshow("Cropped", Cropped);
+
+        waitKey(0);
+
+        return 0;
     }
-
-    // Extract license plate region
-    Rect roi = boundingRect(screenCnt);
-    Mat Cropped = gray(roi);
-
-    Mat binarized;
-    threshold(Cropped, binarized, 0, 255, THRESH_BINARY_INV + THRESH_OTSU);
-
-    // Initialize Tesseract OCR
-    tesseract::TessBaseAPI* api = new tesseract::TessBaseAPI();
-    api->Init("C:/Users/ella/vcpkg/packages/tesseract_x64-windows-static/share/tessdata", "eng", tesseract::OEM_DEFAULT);
-    api->SetImage((uchar*)binarized.data, binarized.cols, binarized.rows, 1, binarized.step);
-
-    // Get the text from the license plate
-    char* outText = api->GetUTF8Text();
-    cout << "License plate text: " << outText << endl;
-
-    // Clean up
-    delete[] outText;
-    api->End();
-
-    resize(img, img, Size(500, 300));
-    resize(Cropped, Cropped, Size(400, 200));
-    imshow("car", img);
-    imshow("Cropped", Cropped);
-
-    waitKey(0);
-
-    return 0;
-
 }
